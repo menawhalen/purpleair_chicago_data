@@ -20,8 +20,8 @@ api_key <- '4660F889-5645-11ED-B5AA-42010A800006'
 fields=c("pm2.5_atm, pm2.5_atm_a, pm2.5_atm_b")
 
 
-start <- "2023-1-22 00:00:00"
-end <- "2023-1-29 23:59:59"
+start <- "2023-01-01 00:00:00"
+end <- "2023-01-31 23:59:59"
 
 # Set Time Stamp
 t_dif <- as.POSIXct(end, tz="UTC") - as.POSIXct(start, tz="UTC")
@@ -44,11 +44,13 @@ if (t_dif <= as.difftime(48, units = 'hours') ) {
 ## can update sensor to be vector later
 URLbase <- paste0('https://api.purpleair.com/v1/sensors/',sensor_id, '/history') 
 r_for <- data.frame()
+r_dataframe <- data.frame()
  for (j in 1:length(start_timestamps)) {
   # Set variables
   queryList = list(
     start_timestamp = as.character(as.integer(as.POSIXct(start_timestamps[j], tz="UTC"))),
     end_timestamp = as.character(as.integer(as.POSIXct(end_timestamps[j], tz="UTC"))),
+    average = 0,
     fields = fields)
   
   # GET PurpleAir sensor history data
@@ -66,7 +68,6 @@ r_for <- data.frame()
   r_dataframe <- as.data.frame(r_parsed$data) 
   names(r_dataframe) <- r_parsed$fields
 
-  r_dataframe
   
   # Convert datetime format
   r_dataframe$time_stamp <- as.integer(r_dataframe$time_stamp)
