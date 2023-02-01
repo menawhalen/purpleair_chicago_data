@@ -17,7 +17,7 @@ library(tcltk)
 
 sensor_id <- '151082'
 api_key <- '4660F889-5645-11ED-B5AA-42010A800006'
-fields=c("pm2.5_atm, pm2.5_atm_a, pm2.5_atm_b")
+fields=c("pm2.5_atm, pm2.5_atm_a, pm2.5_atm_b, humidity, temperature, pressure, rssi")
 
 
 start <- "2023-01-01 00:00:00"
