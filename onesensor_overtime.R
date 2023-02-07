@@ -89,7 +89,8 @@ for (i in 1:length(sensorIndex)) {
   full_sensor <- rbind(full_sensor, r_for)
 }
 
-ggplot(r_for, aes(time_stamp, pm2.5_atm)) +
-  geom_line()
+ggplot(full_sensor, aes(time_stamp, pm2.5_atm)) +
+  geom_line() + 
+  facet_wrap(~sensor)
 
 write_rds(r_for, "data/LUCbus_oct_jan.rds")
