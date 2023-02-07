@@ -15,13 +15,13 @@ library(tcltk)
 #' fields 	The "Fields" parameter specifies which 'sensor data fields' to include in the response.
 
 
-sensor_id <- '151082'
-api_key <- '4660F889-5645-11ED-B5AA-42010A800006'
-fields=c("pm2.5_atm, pm2.5_atm_a, pm2.5_atm_b, humidity, temperature, pressure, rssi")
-
-
-start <- "2023-01-01 00:00:00"
-end <- "2023-01-31 23:59:59"
+# sensor_id <- '151082'
+# api_key <- '4660F889-5645-11ED-B5AA-42010A800006'
+# fields=c("pm2.5_atm, pm2.5_atm_a, pm2.5_atm_b, humidity, temperature, pressure, rssi")
+# 
+# 
+# start <- "2022-10-01 00:00:00"
+# end <- "2023-01-31 23:59:59"
 
 # Set Time Stamp
 t_dif <- as.POSIXct(end, tz="UTC") - as.POSIXct(start, tz="UTC")
@@ -41,11 +41,16 @@ if (t_dif <= as.difftime(48, units = 'hours') ) {
 }
 
 
-## can update sensor to be vector later
-URLbase <- paste0('https://api.purpleair.com/v1/sensors/',sensor_id, '/history') 
-r_for <- data.frame()
-r_dataframe <- data.frame()
- for (j in 1:length(start_timestamps)) {
+# ## can update sensor to be vector later
+# URLbase <- paste0('https://api.purpleair.com/v1/sensors/',sensor_id, '/history') 
+chicago_sensors <- readRDS("data/chicago_sensors_spatial.rds")
+
+sensorIndex <- chicago_sensors[1:2]
+full_sensor <- data.frame()
+for (i in 1:length(sensorIndex)) {
+  URLbase <- paste0('https://api.purpleair.com/v1/sensors/',sensorIndex[i], '/history') 
+  r_for <- data.frame()
+  for (j in 1:length(start_timestamps)) {
   # Set variables
   queryList = list(
     start_timestamp = as.character(as.integer(as.POSIXct(start_timestamps[j], tz="UTC"))),
@@ -74,10 +79,17 @@ r_dataframe <- data.frame()
   r_dataframe$time_stamp <- as.POSIXct(r_dataframe$time_stamp, origin="1970-01-01", tz="UTC")
 
   ## Order by date
-  r_dataframe <- r_dataframe[order(r_dataframe$time_stamp),]
+  r_dataframe <- r_dataframe[order(r_dataframe$time_stamp),] 
   
-  r_for <- rbind(r_for, r_dataframe)
+  r_for <- rbind(r_for, r_dataframe) 
+  }
+  r_for <- r_for %>%
+    mutate(sensor = sensorIndex[i])
+  
+  full_sensor <- rbind(full_sensor, r_for)
 }
 
 ggplot(r_for, aes(time_stamp, pm2.5_atm)) +
   geom_line()
+
+write_rds(r_for, "data/LUCbus_oct_jan.rds")
