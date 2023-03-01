@@ -1,0 +1,350 @@
+---
+title: "Spatial Statistics over Time"
+author: "Mena Whalen"
+date: "7/16/2020"
+output:
+  html_document:
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+The main emphasis for today's discussion is:
+1. Anomalies and trends of time series of all neighborhoods
+2. Spatial autocorrelation for if there is a weekly change in 2018-2019 vs. 2020 (Covid19 potential effect). In other words, yes, maybe there isn't any real cluster in 2018 and 2019, but do we see any change in 2020? 
+
+## Global Moran's I
+Spatial Autocorrelation (Global Moran's I) is a tool that measures spatial autocorrelation based on both feature locations and feature values simultaneously. Given a set of features and an associated attribute, it evaluates whether the pattern expressed is clustered, dispersed, or random. We are examining if neighborhood crime counts have a pattern of cluster, dispersion, or randomness. Moran's I is only done at one time point so we analyze each week in time from our dataset.
+
+```{r global_morans, echo=FALSE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(sf)
+library(lubridate)
+library(spdep)
+library(gganimate)
+library(gridExtra)
+# https://mgimond.github.io/Spatial/spatial-autocorrelation-in-r.html
+# https://rpubs.com/quarcs-lab/spatial-autocorrelation
+index_crimes <- readRDS("data/index_crimes_daily_commuity.rds")
+violent_crimes <- readRDS("data/violent_crimes_daily_commuity.rds")
+
+comm_ar <- here::here("data/comm_areas_shapefiles/chi_comm_areas.shp") %>% 
+  st_read(quiet = TRUE) %>% 
+  mutate(community = tolower(community)) %>% 
+  select(community, geometry)
+
+index_week <- index_crimes %>% 
+  group_by(week = floor_date(day, "week"), community) %>% 
+  tally(index_count)
+violent_week <- violent_crimes %>% 
+  group_by(week = floor_date(day, "week"), community) %>% 
+  tally(violent_count)
+
+index_grouped_week <- index_week %>% 
+  group_by(week) %>% 
+  group_split()
+names(index_grouped_week) <- paste0("week_",str_replace_all(unique(index_week$week), "-", "_"))
+
+neigh_poly <- poly2nb(comm_ar)
+names(neigh_poly) <- comm_ar$community
+
+neigh_weights <- nb2listw(neigh_poly, style = "W")
+
+morans_index <- NULL
+for (j in 1:length(index_grouped_week)){
+  morans_index[[j]] <- moran.mc(index_grouped_week[[j]]$n, neigh_weights, nsim = 1000)
+  names(morans_index)[j] <- names(index_grouped_week)[j]
+}
+
+global_moran_index <- stack(lapply(morans_index, function(x) pluck(x, "statistic")))
+global_moran_index <- global_moran_index %>% 
+  rename(morans_i = values, week = ind) %>% 
+  mutate(week = ymd(str_replace_all(str_remove(week, "week_"), "_", "-")))
+## plots of global morans I
+ggplot(global_moran_index, aes(week, morans_i)) +
+  geom_line() +
+  ggtitle("Global Moran's I by Week")
+```
+
+## Local Moran's I (LISA)
+Local Moran's I is a local spatial autocorrelation statistic based on the Moran's I statistic. It was developed as a local indicator of spatial association or LISA statistic. A LISA statistics is defined as having the following two properties:
+The LISA for each observation gives an indication of the extent of significant spatial clustering of similar values around that observation and the sum of LISAs for all observations is proportional to a global indicator of spatial association.
+
+Below is two gifs of Local Moran's I and LISA clusters tested for significance over time per week.
+![Local Morans](local_LISA_morans_index.gif)
+![LISA](local_LISA_morans_index.gif)
+```{r local_moran_lisa, echo = FALSE}
+local_morans_index <- NULL
+for (k in 1:length(index_grouped_week)){
+  local_morans_index[[k]] <- localmoran(index_grouped_week[[k]]$n, neigh_weights)
+  names(local_morans_index)[k] <- names(index_grouped_week)[k]
+  row.names(local_morans_index[[k]]) <- comm_ar$community
+}
+
+test <- lapply(local_morans_index, function(x) rownames_to_column(data.frame(pluck(x)), "community"))
+test <- lapply(test, function(x) select(x, "Ii", "Pr.z...0.", "community"))
+local <- NULL
+for (i in 1:length(test)){
+  test[[i]]$week <- rep(names(test)[i], length(test[[i]]$community))
+  local <- rbind(local, test[[i]])
+}
+
+local <- local %>% 
+  rename(local_morans = Ii, prob = Pr.z...0.) %>% 
+  mutate(week = ymd(str_replace_all(str_remove(week, "week_"), "_", "-")))
+
+stand_i <- local$local_morans - mean(local$local_morans)
+stand_n_list<- lapply(index_grouped_week, function(x) x$n - mean(x$n))
+stand_n <- NULL
+for (m in 1:length(stand_n_list)){
+  tab <- data.frame(stand = stand_n_list[[m]])
+  stand_n <- rbind(stand_n, tab)
+}
+stand_n <- as.numeric(stand_n$stand)
+signif <- 0.2 
+quadrant <- vector(mode="numeric",length=nrow(local))
+
+# builds a data quadrant
+quadrant[stand_n >0 & stand_i>0] <- 4  
+quadrant[stand_n <0 & stand_i<0] <- 1      
+quadrant[stand_n <0 & stand_i>0] <- 2
+quadrant[stand_n >0 & stand_i<0] <- 3
+quadrant[local["prob"]>signif] <- 0   
+
+
+local <- cbind(local, quadrant = quadrant)
+
+local_morans_index_spat <- left_join(local, comm_ar %>% data.frame(), by = 'community') %>% 
+  st_as_sf()
+
+## local morans
+local_plot <- ggplot(local_morans_index_spat) +
+  geom_sf(aes(fill = local_morans)) +
+  scale_fill_viridis_c() +
+  transition_manual(week) + 
+  labs(title = "Local Moran's I statistics per Week {current_frame}") 
+
+animation <- animate(local_plot, renderer=gifski_renderer(), nframes = 128, fps = 1, end_pause = 1)
+#animation
+
+## LISA clustering 
+
+local_lisa_plot <- ggplot(local_morans_index_spat) +
+  geom_sf(aes(fill = quadrant)) +
+  scale_fill_viridis_c(breaks = c(0,1,2,3,4), labels = c("insignificant","low-low","low-high","high-low","high-high")) +
+  transition_manual(week) + 
+  labs(title = "LISA CLuster per Week {current_frame}") 
+
+animation_lisa <- animate(local_lisa_plot, renderer=gifski_renderer(), nframes = 128, fps = 1, end_pause = 1)
+#animation_lisa
+```
+
+This can be hard to examine so lets look at each month and year in comparison for Local Moran's I.
+```{r local_compare, echo = FALSE, fig.width= 5, fig.height= 6}
+# change first week into correct year
+local[1:77,]$week <- ymd("2018-1-1")
+local_time <- local %>% 
+  mutate(week_is = isoweek(week),
+         month = month(week, label = T),
+         year = year(week))
+
+local_time_spat <- left_join(local_time, comm_ar %>% data.frame(), by = 'community') %>% 
+  st_as_sf()
+
+local_time_spat %>% 
+  filter(month == "Jan") %>% 
+  ggplot() +
+  geom_sf(aes(fill = local_morans)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("Local Moran's I January")
+local_time_spat %>% 
+  filter(month == "Feb") %>% 
+  ggplot() +
+  geom_sf(aes(fill = local_morans)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("Local Moran's I Febuary")
+
+ local_time_spat %>% 
+  filter(month == "Mar") %>% 
+  ggplot() +
+  geom_sf(aes(fill = local_morans)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("Local Moran's I March")
+local_time_spat %>% 
+  filter(month == "Apr") %>% 
+  ggplot() +
+  geom_sf(aes(fill = local_morans)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("Local Moran's I April")
+
+local_time_spat %>% 
+  filter(month == "May") %>% 
+  ggplot() +
+  geom_sf(aes(fill = local_morans)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("Local Moran's I May")
+local_time_spat %>% 
+  filter(month == "Jun") %>% 
+  ggplot() +
+  geom_sf(aes(fill = local_morans)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("Local Moran's I June")
+```
+
+LISA
+```{r lisa, echo = FALSE, fig.width= 5, fig.height= 6}
+local_time_spat %>% 
+  filter(month == "Jan") %>% 
+  ggplot() +
+  geom_sf(aes(fill = quadrant)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("LISA January")
+local_time_spat %>% 
+  filter(month == "Feb") %>% 
+  ggplot() +
+  geom_sf(aes(fill = quadrant)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("LISA Febuary")
+
+local_time_spat %>% 
+  filter(month == "Mar") %>% 
+  ggplot() +
+  geom_sf(aes(fill = quadrant)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("LISA March")
+local_time_spat %>% 
+  filter(month == "Apr") %>% 
+  ggplot() +
+  geom_sf(aes(fill = quadrant)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("LISA April")
+
+local_time_spat %>% 
+  filter(month == "May") %>% 
+  ggplot() +
+  geom_sf(aes(fill = quadrant)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("LISA May")
+local_time_spat %>% 
+  filter(month == "Jun") %>% 
+  ggplot() +
+  geom_sf(aes(fill = quadrant)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("LISA June")
+
+```
+
+## Getis/Ord G (G Stat) Hot Spot
+This statistic tells you where features with either high or low values cluster spatially. This tool works by looking at each feature within the context of neighboring features. A feature with a high value is interesting but may not be a statistically significant hot spot. To be a statistically significant hot spot, a feature will have a high value and be surrounded by other features with high values as well. 
+
+Here is a gif of gstat for hot spot analysis.
+![Getis/Ord G](local_g_index.gif)
+```{r gstat, echo = FALSE, warning=FALSE}
+### getis ord
+near_neigh <- dnearneigh(st_centroid(comm_ar), 0, 8) # picked 8 km which allows everyone to have a neighbor
+names(near_neigh) <- comm_ar$community
+
+near_weights <- nb2listw(near_neigh, style = "B")
+
+local_g <- NULL
+for (i in 1:length(index_grouped_week)){
+  local_g[[i]] <- localG(index_grouped_week[[i]]$n, near_weights)
+  names(local_g)[i] <- names(index_grouped_week)[i]
+}
+
+local_g_index <- NULL
+for (l in 1:length(local_g)){
+  tab <- data.frame(gstat = as.numeric(local_g[[l]]), community = comm_ar$community, 
+                    week = rep(names(local_g)[l], length(local_g[l])))
+  local_g_index <- rbind(local_g_index, tab)
+}
+
+local_g_index <- local_g_index %>%  
+  mutate(week = ymd(str_replace_all(str_remove(week, "week_"), "_", "-")))
+
+local_g_index_spat <- left_join(local_g_index, comm_ar %>% data.frame(), by = 'community') %>% 
+  st_as_sf()
+
+
+local_plot_g <- ggplot(local_g_index_spat) +
+  geom_sf(aes(fill = gstat)) +
+  scale_fill_viridis_c() +
+  transition_manual(week) + 
+  labs(title = "Local G statistics per Week {current_frame}") 
+
+animation_g <- animate(local_plot_g, renderer=gifski_renderer(), nframes = 128, fps = 1, end_pause = 1)
+
+```
+
+Now lets compare each month and year.
+
+```{r compare_g,echo=FALSE, fig.width= 5, fig.height= 6}
+local_g_index[1:77,]$week <- ymd("2018-1-1")
+local_time_g <- local_g_index %>% 
+  mutate(week_is = isoweek(week),
+         month = month(week, label = T),
+         year = year(week))
+
+local_time_spat_g <- left_join(local_time_g, comm_ar %>% data.frame(), by = 'community') %>% 
+  st_as_sf()
+
+local_time_spat_g %>% 
+  filter(month == "Jan") %>% 
+  ggplot() +
+  geom_sf(aes(fill = gstat)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("G Statistic January")
+
+ local_time_spat_g %>% 
+  filter(month == "Feb") %>% 
+  ggplot() +
+  geom_sf(aes(fill = gstat)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("G Statistic Feburary")
+
+local_time_spat_g %>% 
+  filter(month == "Mar") %>% 
+  ggplot() +
+  geom_sf(aes(fill = gstat)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("G Statistic March")
+
+local_time_spat_g %>% 
+  filter(month == "Apr") %>% 
+  ggplot() +
+  geom_sf(aes(fill = gstat)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("G Statistic April")
+
+local_time_spat_g %>% 
+  filter(month == "May") %>% 
+  ggplot() +
+  geom_sf(aes(fill = gstat)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("G Statistic May")
+
+local_time_spat_g %>% 
+  filter(month == "Jun") %>% 
+  ggplot() +
+  geom_sf(aes(fill = gstat)) +
+  scale_fill_viridis_c() +
+  facet_grid(rows = vars(week_is), cols = vars(year)) +
+  ggtitle("G Statistic June")
+```
