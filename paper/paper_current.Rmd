@@ -1,0 +1,63 @@
+---
+title: |
+  |  \Large Spatial Autocorrelation and PurpleAir Sensors. 
+author: | 
+  | \large Mena Whalen \vspace{-1.1mm}
+  | \normalsize Department of Mathematics and Statistics \vspace{-1mm}
+  | \normalsize Loyola University Chicago \vspace{-1mm}
+  | \normalsize Chicago, IL 60660 \vspace{-1mm}
+  | \normalsize [`mwhalen3@luc.edu`](mailto:mwhalen3@luc.edu) \vspace{-1mm}
+  |
+  | \large Alyssa Peer \vspace{-1.1mm}
+  | \normalsize Department of Mathematics and Statistics \vspace{-1mm}
+  | \normalsize Loyola University Chicago \vspace{-1mm}
+  | \normalsize Chicago, IL 60660 \vspace{-1mm}
+  | \normalsize [`apeer@luc.edu`](mailto:apeer@luc.edu) \vspace{-1mm}
+abstract: |
+  | put abstract here eventually. \vspace{2mm}
+  | *Keywords*: spatial autocorrelation, air quailty, pm2.5
+bibliography: references.bib
+fontsize: 12pt
+link-citations: true
+linkcolor: cyan
+urlcolor: cyan
+output:
+  pdf_document:
+    df_print: kable
+    number_sections: true
+    keep_tex: true
+header-includes:
+ \usepackage{setspace}
+ \setstretch{1.15}
+ \usepackage{float}
+ \floatplacement{figure}{t}
+---
+
+```{r setup, echo=FALSE, message=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	fig.align = "center",
+	message = FALSE,
+	warning = FALSE
+)
+
+```
+
+```{r pkgs}
+library(tidyverse)
+theme_set(theme_minimal())
+library(Lahman)
+```
+
+\newpage
+
+# Abstract {#sec:abs}
+Write the abstract for Grad Symposium here
+
+
+# Introduction {#sec:intro}
+
+how to write a site @de_azevedo_analysis_2022
+
+
+# References
