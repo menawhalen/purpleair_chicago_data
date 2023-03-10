@@ -52,7 +52,9 @@ library(Lahman)
 \newpage
 
 # Abstract {#sec:abs}
-Write the abstract for Grad Symposium here
+  We have seen a rise in combustion engine transportation, factories, and forest fires because of an industrialized society and changing climate. Each of these entities goes through a process that burns carbon which can form particulate matter in the air. Some particulate matter can be very harmful to humans as it can be small enough to enter the lungs and bloodstream and cause adverse health-related side effects. PM2.5 is one of these air pollutants, and it can be especially harmful to those with pre-existing heart and lung conditions and may cause long-term health side effects in others. CARE, Community Air Research Experience, is a program in partnership with Loyola University Chicago and others that aims to help place low-cost sensors to track these air pollutants around the Chicagoland area. These low-cost air quality sensors are from Purple Air, and they track various sizes of air pollutants, including PM2.5.
+  Given the health concerns associated with short-term and long-term exposure to this minute air pollutant and the socioeconomic disparities from one Chicago neighborhood to the next, it is imperative to analyze this data and its levels over time and space. The spatiotemporal analysis of PM2.5 in the Chicagoland area will help tell the story of who is affected by higher concentrations of PM2.5 and where it is happening. One method of analyzing this data is to measure spatial autocorrelation. Spatial autocorrelation will be critical in helping us to understand how one area’s air pollution in Chicago is related to another.
+
 
 
 # Introduction {#sec:intro}
